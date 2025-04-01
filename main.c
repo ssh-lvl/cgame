@@ -140,9 +140,7 @@ void render_game() {
 			const int boxx = boxes[c]->x;
 			const int boxy = boxes[c]->y;
 			if (boxx > -1 && boxx < COLS && boxy > -1 && boxy < ROWS) {
-				//segment fault!! box_count not properly reset, cause arr overflow?
 				game_state[boxes[c]->y][boxes[c]->x] = '%';
-				//fixed, handle_gameplay() was not resetting init var to true, therefore it would not reload boxes
 			}
 		}
 	}
@@ -156,7 +154,9 @@ void render_game() {
 				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[0m");
 				break;
 			case ' ':
-				buffer[index++] = game_state[i][j];
+				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[48;5;235m");
+				buffer[index++] = ' ';
+				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[0m");
 				break;
 			case 'P':
 				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[38;5;93m");
@@ -934,7 +934,7 @@ main_menu:
 input:
 	;
 	set_nonblocking(1,0);
-	char ch = getchar();
+	const char ch = getchar();
 	if (ch != ' ' && ch != '\n' && ch != '\t' && ch != EOF) {
 		if (isdigit(ch)) {
 			const char str[2] = {ch,'\0'};
