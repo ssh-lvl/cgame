@@ -21,13 +21,14 @@
 // } map_layer;
 
 // volatile map_layer* map_layers[2];
+
 volatile char * next_map = "";
 volatile int escape_flag = 0;
 volatile char game_state[ROWS][COLS];
 volatile char persist_array[ROWS][COLS];
 volatile int playerX = COLS / 2;
 volatile int playerY = ROWS / 2;
-volatile int colision = 1;
+volatile int collision = 1;
 volatile int death = 0;
 volatile int death_text_printed = 0;
 int init = 1;
@@ -307,7 +308,7 @@ void* update_game_state(void* arg) {
 		char prev_game_state[ROWS][COLS];
 		copy_2d_array(prev_game_state, (char (*)[COLS])game_state);
 
-		if (colision) {
+		if (collision) {
 			if (playerX >= COLS) {
 				playerX = COLS - 1;
 			}
@@ -399,7 +400,7 @@ box* find_box(int x, int y) {
 }
 
 int box_check(int x, int y, int direction) {
-	if (colision) {
+	if (collision) {
 		box* box = find_box(x, y);
 		if (box == NULL) {
 			return 1;
@@ -448,12 +449,12 @@ int box_check(int x, int y, int direction) {
 int check_collision(int x, int y) {
 	for (int i = 0; i < box_count; i++) {
 		if (boxes[i]->x == x && boxes[i]->y == y) {
-			if (box_check(boxes[i]->x, boxes[i]->y, 0) != 0 && colision) {
+			if (box_check(boxes[i]->x, boxes[i]->y, 0) != 0 && collision) {
 				return 0;
 			}
 		}
 	}
-	if (game_state[y][x] == '#' && colision) {
+	if (game_state[y][x] == '#' && collision) {
 		return 0;
 	}
 	return 1;
@@ -525,7 +526,12 @@ int handle_gameplay() {
 	    if (win_map) {
 	        if (!death_text_printed) {
 				clear_screen();
-				printf("\e[38;5;42m /$$     /$$                        /$$      /$$ /$$          \n|  $$   /$$/                       | $$  /$ | $$|__/          \n \\  $$ /$$//$$$$$$  /$$   /$$      | $$ /$$$| $$ /$$ /$$$$$$$ \n  \\  $$$$//$$__  $$| $$  | $$      | $$/$$ $$ $$| $$| $$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$$$_  $$$$| $$| $$  \\ $$\n    | $$ | $$  | $$| $$  | $$      | $$$/ \\  $$$| $$| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$/   \\  $$| $$| $$  | $$\n    |__/  \\______/  \\______/       |__/     \\__/|__/|__/  |__/\n\e[0m-r to respawn   -q to quit to menu");
+	        	char * death_text =	"\e[38;5;42m /$$     /$$                        /$$      /$$ /$$          \n|  $$   /$$/                       | $$  /$ | $$|__/          \n \\  $$ /$$//$$$$$$  /$$   /$$      | $$ /$$$| $$ /$$ /$$$$$$$ \n  \\  $$$$//$$__  $$| $$  | $$      | $$/$$ $$ $$| $$| $$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$$$_  $$$$| $$| $$  \\ $$\n    | $$ | $$  | $$| $$  | $$      | $$$/ \\  $$$| $$| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$/   \\  $$| $$| $$  | $$\n    |__/  \\______/  \\______/       |__/     \\__/|__/|__/  |__/\n\e[0m-r to respawn   ";
+	        	if (strcmp(next_map,"") != 0) {
+	        		strcat(death_text, "-n to go to the next map   ");
+	        	}
+	        	strcat(death_text,"-q to quit to menu");
+				// printf(death_text);
 				death_text_printed = 1;
 				set_nonblocking(1, 0);
 			} else {
@@ -634,7 +640,7 @@ int handle_gameplay() {
 					pthread_mutex_unlock(&game_state_mutex);
 					break;
 				case '\\':
-					colision = !colision;  //noclip toggle
+					collision = !collision;  //noclip toggle
 					break;
 				}
 				if (!escape_flag) {
@@ -645,7 +651,7 @@ int handle_gameplay() {
 			    if (game_state[playerY][playerX] == 'P') {
 			        win_map = 1;
 			    }
-				if (game_state[playerY][playerX] == '_' || game_state[playerY][playerX] == ' ' && colision) {
+				if (game_state[playerY][playerX] == '_' || game_state[playerY][playerX] == ' ' && collision) {
 					death = 1;
 				} 
 				// else {
