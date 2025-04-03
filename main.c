@@ -11,17 +11,6 @@
 #define ROWS 11 // y
 #define COLS 32 // x
 
-
-//scrapped feature, might implement later in dev however I don't think so.
-
-// typedef struct { //horribly inefficient memory usage...
-//     char name[16];
-//     char data[ROWS][COLS];
-//     char string_map[ROWS * (COLS + 1) + 1];
-// } map_layer;
-
-// volatile map_layer* map_layers[2];
-
 const char * next_map = "";
 volatile int escape_flag = 0;
 volatile char game_state[ROWS][COLS];
@@ -44,38 +33,28 @@ typedef struct {
 	char state;
 } box;
 
+typedef struct {
+	int dx;
+	int dy;
+	int dir;
+} Move;
+
 box** boxes;
 
-char game_map[ROWS * (COLS + 1) + 1]
-//=
-// "..................#.............\n"
-// ".................._.............\n"
-// ".................._.......%.....\n"
-// ".................._.............\n"
-// "..................#.............\n"
-// ".......############.............\n"
-// "..................#_____________\n"
-// "..................#.............\n"
-// "..................#..@.....%....\n"
-// "..................#.............\n"
-// "..................#.............\n"
-;
-char persist_map[ROWS * (COLS + 1) + 1]
-//=
-// ".................=.=============\n"
-// ".................=.............=\n"
-// ".................=.............=\n"
-// ".................=.............=\n"
-// ".................=.............=\n"
-// "...................=============\n"
-// "................................\n"
-// "...............................=\n"
-// "...............................=\n"
-// "...............................=\n"
-// "...................=============\n"
-;
+char game_map[ROWS * (COLS + 1) + 1];
+char persist_map[ROWS * (COLS + 1) + 1];
 
-void create_box(int x, int y) {
+Move get_move(const char input) {
+	switch (input) {
+		case 'w': return (Move){ 0, -1, 1 }; // Up
+		case 's': return (Move){ 0,  1, 3 }; // Down
+		case 'a': return (Move){ -1, 0, 2 }; // Left
+		case 'd': return (Move){ 1,  0, 4 }; // Right
+		default:  return (Move){ 0,  0, 0 };
+	}
+}
+
+void create_box(const int x, const int y) {
 	box* new_box = (box*)malloc(sizeof(box));
 	if (new_box == NULL) {
 		perror("Failed to allocate memory for box creation");
@@ -89,7 +68,6 @@ void create_box(int x, int y) {
 	new_box->x = x;
 	new_box->y = y;
 	new_box->id = box_count;
-	new_box->state = 'n';
 
 	boxes[box_count] = new_box;
 	box_count++;
@@ -135,12 +113,14 @@ char* get_user_input() {
 void render_game() {
 	char buffer[ROWS * (COLS * 10) + 1];
 	int index = 0;
-	for (int c = 0; c < box_count; c++) {
-		if (boxes[c] != NULL) {
-			const int boxx = boxes[c]->x;
-			const int boxy = boxes[c]->y;
-			if (boxx > -1 && boxx < COLS && boxy > -1 && boxy < ROWS) {
-				game_state[boxes[c]->y][boxes[c]->x] = '%';
+	if (boxes != NULL) {
+		for (int c = 0; c < box_count; c++) {
+			if (boxes[c] != NULL) {
+				const int boxx = boxes[c]->x;
+				const int boxy = boxes[c]->y;
+				if (boxx > -1 && boxx < COLS && boxy > -1 && boxy < ROWS) {
+					game_state[boxes[c]->y][boxes[c]->x] = '%';
+				}
 			}
 		}
 	}
@@ -154,8 +134,8 @@ void render_game() {
 				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[0m");
 				break;
 			case ' ':
-				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[48;5;235m");
-				buffer[index++] = ' ';
+				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[32m\x1B[102m");
+				buffer[index++] = '#';
 				index += snprintf(&buffer[index], sizeof(buffer) - index, "\x1B[0m");
 				break;
 			case 'P':
@@ -191,7 +171,6 @@ void render_game() {
 	printf("%s", buffer);
 	printf("\nWASD - Move    R - Restart    Q - Quit to menu    %s\n",collision ? "" : "NOCLIP");
 }
-
 
 int compare_2d_arrays(char arr1[ROWS][COLS], char arr2[ROWS][COLS]) {
 	for (int i = 0; i < ROWS; i++) {
@@ -232,6 +211,7 @@ void reset_boxes() {
 			free(boxes[i]);
 		}
 		free(boxes);
+		boxes = NULL;
 	}
 
 	boxes = (box**)malloc(max_boxes * sizeof(box*));
@@ -308,46 +288,21 @@ void* update_game_state(void* arg) {
 		copy_2d_array(prev_game_state, (char (*)[COLS])game_state);
 
 		if (collision) {
-			if (playerX >= COLS) {
-				playerX = COLS - 1;
-			}
-			if (playerY >= ROWS) {
-				playerY = ROWS - 1;
-			}
-			if (playerX < 0) {
-				playerX = 0;
-			}
-			if (playerY < 0) {
-				playerY = 0;
-			}
+			playerX = (playerX < 0) ? 0 : (playerX > COLS - 1) ? COLS - 1 : playerX;
+			playerY = (playerY < 0) ? 0 : (playerY > ROWS - 1) ? ROWS - 1 : playerY;
 		} else {
-			if (playerX >= COLS) {
-				playerX = 0;
-			}
-			if (playerY >= ROWS) {
-				playerY = 0;
-			}
-			if (playerX < 0) {
-				playerX = COLS - 1;
-			}
-			if (playerY < 0) {
-				playerY = ROWS - 1;
-			}
+			playerX = (playerX + COLS) % COLS;
+			playerY = (playerY + ROWS) % ROWS;
 		}
-		for (int c = 0; c < ROWS; c++) {
-			for (int v = 0; v < COLS; v++) {
-				if (persist_array[c][v] != '.') {
-					game_state[c][v] = persist_array[c][v];
-				}
-			}
-		}
-
 		for (int i = 0; i < ROWS; i++) {
 			for (int j = 0; j < COLS; j++) {
-			    if (game_state[i][j] == '_' || game_state[i][j] == ' ' || game_state[i][j] == 'P'){
-			        continue;
-			    }
-			    if (playerX == j && playerY == i) {
+				if (persist_array[i][j] != '.') {
+					game_state[i][j] = persist_array[i][j];
+				}
+				if (game_state[i][j] == '_' || game_state[i][j] == ' ' || game_state[i][j] == 'P') {
+					continue;
+				}
+				if (playerX == j && playerY == i) {
 					game_state[i][j] = '@';
 					continue;
 				}
@@ -398,51 +353,32 @@ box* find_box(int x, int y) {
 }
 
 int box_check(const int x, const int y, const int direction) {
-	if (collision) {
-		box* box = find_box(x, y);
-		if (box == NULL) {
-			return 1;
+	if (!collision) return 1;
+
+	box* b = find_box(x, y);
+	if (!b) return 1;
+
+	const int dx[] = {0, 0, -1, 1};  // Left, Right
+	const int dy[] = {-1, 1, 0, 0};  // Up, Down
+
+	int new_x = b->x + dx[direction - 1];
+	int new_y = b->y + dy[direction - 1];
+
+	if (new_x >= 0 && new_x < COLS && new_y >= 0 && new_y < ROWS) {
+		char cell = game_state[new_y][new_x];
+		if (cell == '.' || cell == '_' || cell == ' ') {
+			b->x = new_x;
+			b->y = new_y;
+		} else if (cell == '=') {
+			return 0;
 		}
-		switch (direction) {
-		case 1: // up
-			if (box->y > 0 && (game_state[box->y - 1][x] == '.' || game_state[box->y - 1][x] == '_' || game_state[box->y - 1][x] == ' ')) {
-				box->y--;
-			} else if (game_state[box->y - 1][x] == '=') {
-				return 0;
-			}
-			break;
-		case 2: // left
-			if (box->x > 0 && (game_state[y][box->x - 1] == '.' || game_state[y][box->x - 1] == '_' || game_state[y][box->x - 1] == ' ')) {
-				box->x--;
-			} else if (game_state[y][box->x - 1] == '=') {
-				return 0;
-			}
-			break;
-		case 3: // down
-			if (box->y < ROWS - 1 && (game_state[box->y + 1][x] == '.' || game_state[box->y + 1][x] == '_' || game_state[box->y + 1][x] == ' ')) {
-				box->y++;
-			} else if (game_state[box->y + 1][x] == '=') {
-				return 0;
-			}
-			break;
-		case 4: // right
-			if (box->x < COLS - 1 && (game_state[y][box->x + 1] == '.' || game_state[y][box->x + 1] == '_' || game_state[y][box->x + 1] == ' ')) {
-				box->x++;
-			} else if (game_state[y][box->x + 1] == '=') {
-				return 0;
-			}
-			break;
-		default:
-			return 1;
-		}
-		if (game_state[box->y][box->x] == '_') {
-			game_state[box->y][box->x] = '.';
-			remove_box(box->x, box->y);
-		}else if (game_state[box->y][box->x] == ' ') {
-			remove_box(box->x, box->y);
-		}
-		return 1;
 	}
+	char cell = game_state[b->y][b->x];
+	if (cell == '_' || cell == ' ') {
+		game_state[b->y][b->x] = (cell == '_') ? '.' : cell;
+		remove_box(b->x, b->y);
+	}
+
 	return 1;
 }
 
@@ -529,7 +465,7 @@ int load_map(const char *filepath) {
 	}
 	while (section) {
 		if (strstr(section, "map:") != NULL) {
-		    section += 5;
+			section += 5;
 			int row = 0;
 			int col = 0;
 			int i = 0;
@@ -586,7 +522,6 @@ int load_map(const char *filepath) {
 	return 0;
 }
 
-
 void render_editor(int state) {
 	char buffer[ROWS * (COLS * 10) + 1];
 	int index = 0;
@@ -624,7 +559,6 @@ buffer_full:
 	printf("\nWASD - Move cursor    E - Switch map mode    Current map: %s\nQ - Quit editor    1 - Save    2 - Export map    F - Set next map: %s.map", state ? "Regular" : "Persist",next_map);
 }
 
-
 int handle_gameplay() {
 	int row = 0,col = 0;
 	for (int c = 0; persist_map[c] != '\0'; c++) {
@@ -636,7 +570,6 @@ int handle_gameplay() {
 			col++;
 		}
 	}
-	// boxes = (box**)malloc(max_boxes * sizeof(box*));
 	printf("\x1B[?25l");
 	init = 1;
 	update_game_state(&init);
@@ -649,53 +582,53 @@ int handle_gameplay() {
 
 	set_nonblocking(1, 1);
 	while (!escape_flag) {
-	    if (win_map) {
-		    if (!death_text_printed) {
-		    	clear_screen();
-		    	const char death_text[583] =	"\x1B[38;5;42m /$$     /$$                        /$$      /$$ /$$          \n|  $$   /$$/                       | $$  /$ | $$|__/          \n \\  $$ /$$//$$$$$$  /$$   /$$      | $$ /$$$| $$ /$$ /$$$$$$$ \n  \\  $$$$//$$__  $$| $$  | $$      | $$/$$ $$ $$| $$| $$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$$$_  $$$$| $$| $$  \\ $$\n    | $$ | $$  | $$| $$  | $$      | $$$/ \\  $$$| $$| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$/   \\  $$| $$| $$  | $$\n    |__/  \\______/  \\______/       |__/     \\__/|__/|__/  |__/\n\x1B[0m";
-		    	if (strcmp(next_map,"") != 0) {
-		    		strcat(death_text, "-n to go to the next map   ");
-		    	}
-		    	strcat(death_text,"-r to respawn   -q to quit to menu");
-		    	printf(death_text);
-		    	death_text_printed = 1;
-		    	set_nonblocking(1, 0);
-		    } else {
-		    	const char ch = getchar();
-		    	switch (ch) {
-		    		case 'r':
-		    			pthread_mutex_lock(&game_state_mutex);
-		    			win_map = 0;
-		    			death_text_printed = 0;
-		    			init = 1;
-		    			playerX = COLS / 2;
-		    			playerY = ROWS / 2;
-		    			update_game_state(&init);
-		    			init = 0;
-		    			set_nonblocking(1, 1);
-		    			pthread_mutex_unlock(&game_state_mutex);
-		    			break;
-		    		case 'n':
-		    			if (strcmp(next_map,"") != 0) {
-		    				pthread_mutex_lock(&game_state_mutex);
-		    				win_map = 0;
-		    				death_text_printed = 0;
-		    				set_nonblocking(1, 1);
-		    				pthread_mutex_unlock(&game_state_mutex);
-		    				return 5;
-		    			}
-		    			break;
-		    		case 'q':
-		    			death = 0;
-		    			death_text_printed = 0;
-		    			escape_flag = 1;
-		    			clear_screen();
-		    			break;
-		    		default:
-		    			break;
-		    	}
-		    }
-	    } else {
+		if (win_map) {
+			if (!death_text_printed) {
+				clear_screen();
+				const char *death_text = "\x1B[38;5;42m /$$     /$$                        /$$      /$$ /$$          \n|  $$   /$$/                       | $$  /$ | $$|__/          \n \\  $$ /$$//$$$$$$  /$$   /$$      | $$ /$$$| $$ /$$ /$$$$$$$ \n  \\  $$$$//$$__  $$| $$  | $$      | $$/$$ $$ $$| $$| $$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$$$_  $$$$| $$| $$  \\ $$\n    | $$ | $$  | $$| $$  | $$      | $$$/ \\  $$$| $$| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$/   \\  $$| $$| $$  | $$\n    |__/  \\______/  \\______/       |__/     \\__/|__/|__/  |__/\n\x1B[0m";
+				printf("%s",death_text);
+				if (strcmp(next_map,"") != 0) {
+					printf("-n to go to the next map   ");
+				}
+				printf("-r to respawn   -q to quit to menu");
+				death_text_printed = 1;
+				set_nonblocking(1, 0);
+			} else {
+				const char ch = getchar();
+				switch (ch) {
+				case 'r':
+					pthread_mutex_lock(&game_state_mutex);
+					win_map = 0;
+					death_text_printed = 0;
+					init = 1;
+					playerX = COLS / 2;
+					playerY = ROWS / 2;
+					update_game_state(&init);
+					init = 0;
+					set_nonblocking(1, 1);
+					pthread_mutex_unlock(&game_state_mutex);
+					break;
+				case 'n':
+					if (strcmp(next_map,"") != 0) {
+						pthread_mutex_lock(&game_state_mutex);
+						win_map = 0;
+						death_text_printed = 0;
+						set_nonblocking(1, 1);
+						pthread_mutex_unlock(&game_state_mutex);
+						return 5;
+					}
+					break;
+				case 'q':
+					death = 0;
+					death_text_printed = 0;
+					escape_flag = 1;
+					clear_screen();
+					break;
+				default:
+					break;
+				}
+			}
+		} else {
 			if (death) {
 				if (!death_text_printed) {
 					clear_screen();
@@ -705,71 +638,48 @@ int handle_gameplay() {
 				} else {
 					const char ch = getchar();
 					switch (ch) {
-						case 'r':
-							pthread_mutex_lock(&game_state_mutex);
-							death = 0;
-							death_text_printed = 0;
-							init = 1;
-							playerX = COLS / 2;
-							playerY = ROWS / 2;
-							update_game_state(&init);
-							init = 0;
-							set_nonblocking(1, 1);
-							pthread_mutex_unlock(&game_state_mutex);
-							break;
-						case 'q':
-							death = 0;
-							death_text_printed = 0;
-							escape_flag = 1;
-							clear_screen();
-							break;
-						default:
-							break;
+					case 'r':
+						pthread_mutex_lock(&game_state_mutex);
+						death = 0;
+						death_text_printed = 0;
+						init = 1;
+						playerX = COLS / 2;
+						playerY = ROWS / 2;
+						update_game_state(&init);
+						init = 0;
+						set_nonblocking(1, 1);
+						pthread_mutex_unlock(&game_state_mutex);
+						break;
+					case 'q':
+						death = 0;
+						death_text_printed = 0;
+						escape_flag = 1;
+						clear_screen();
+						break;
+					default:
+						break;
 					}
 				}
 			} else {
 				const char ch = getchar();
 				if (ch != EOF) {
-					int box_check_return;
 					switch (ch) {
-						case 'w':
-							box_check_return = box_check(playerX, playerY - 1, 1);
-						if (box_check_return == 1) {
-							if (check_collision(playerX, playerY - 1)) {
-								playerY--;
-							}
+					case 'w':
+					case 's':
+					case 'a':
+					case 'd':
+						const Move move = get_move(ch);
+						if (box_check(playerX + move.dx, playerY + move.dy, move.dir ) == 1 && check_collision(playerX + move.dx, playerY + move.dy)) {
+							playerX += move.dx;
+							playerY += move.dy;
 						}
 						break;
-						case 's':
-							box_check_return = box_check(playerX, playerY + 1, 3);
-						if (box_check_return == 1) {
-							if (check_collision(playerX, playerY + 1)) {
-								playerY++;
-							}
-						}
-						break;
-						case 'd':
-							box_check_return = box_check(playerX + 1, playerY, 4);
-						if (box_check_return == 1) {
-							if (check_collision(playerX + 1, playerY)) {
-								playerX++;
-							}
-						}
-						break;
-						case 'a':
-							box_check_return = box_check(playerX - 1, playerY, 2);
-						if (box_check_return == 1) {
-							if (check_collision(playerX - 1, playerY)) {
-								playerX--;
-							}
-						}
-						break;
-						case 'q':
-							escape_flag = 1;
+					case 'q':
+						escape_flag = 1;
 						clear_screen();
 						break;
-						case 'r':
-							pthread_mutex_lock(&game_state_mutex);
+					case 'r':
+						pthread_mutex_lock(&game_state_mutex);
 						death = 0;
 						death_text_printed = 0;
 						init = 1;
@@ -779,11 +689,11 @@ int handle_gameplay() {
 						init = 0;
 						pthread_mutex_unlock(&game_state_mutex);
 						break;
-						case '\\':
-							collision = !collision;  //noclip toggle
+					case '\\':
+						collision = !collision;  //noclip toggle
 						break;
-						default:
-							break;
+					default:
+						break;
 					}
 					if (!escape_flag) {
 						update_game_state(&init);
@@ -796,9 +706,6 @@ int handle_gameplay() {
 					if ((game_state[playerY][playerX] == '_' || game_state[playerY][playerX] == ' ') && collision) {
 						death = 1;
 					}
-					// else {
-					// 	usleep(10000);
-					// }
 				}
 			}
 		}
@@ -845,21 +752,21 @@ int handle_editor() {
 		const char ch = getchar();
 		if (ch != EOF) {
 			switch (ch) {
-			case 'W':
+				case 'W':
 			case 'w':
-				if (playerY > 0) playerY--;
+				playerY = (playerY > 0) ? playerY - 1 : 0;
 				break;
 			case 'A':
 			case 'a':
-				if (playerX > 0) playerX--;
+				playerX = (playerX > 0) ? playerX - 1 : 0;
 				break;
 			case 'S':
 			case 's':
-				if (playerY < ROWS - 1) playerY++;
+				playerY = (playerY < ROWS - 1) ? playerY + 1 : ROWS - 1;
 				break;
 			case 'D':
 			case 'd':
-				if (playerX < COLS - 1) playerX++;
+				playerX = (playerX < COLS - 1) ? playerX + 1 : COLS - 1;
 				break;
 			case 'E':
 			case 'e':
@@ -972,34 +879,34 @@ play_switch:
 				switch(play_state) {
 				case 1:
 					switch (handle_gameplay()) {
-						case 1:
-							goto main_menu;
-						case 5:
-							switch (load_map(next_map)) {
-								case 3:
-									clear_screen();
-									printf("\x1B[?25l");
-									printf("%s",menu_text);
-									printf("\n\nMap not found.");
-									break;
-								case 2:
-									clear_screen();
-									printf("\x1B[?25l");
-									printf("%s",menu_text);
-									printf("\n\nMap is malformed or corrupted.");
-									break;
-								case 0:
-									play_state = 1;
-									goto play_switch;
-								default:
-									clear_screen();
-									printf("\x1B[?25l");
-									printf("%s",menu_text);
-									printf("\n\nSomething went horribly wrong.");
-									break;
-							}
-						default:
+					case 1:
+						goto main_menu;
+					case 5:
+						switch (load_map(next_map)) {
+						case 3:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nMap not found.");
 							break;
+						case 2:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nMap is malformed or corrupted.");
+							break;
+						case 0:
+							play_state = 1;
+							goto play_switch;
+						default:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nSomething went horribly wrong.");
+							break;
+						}
+					default:
+						break;
 					}
 					break;
 				case 2:
@@ -1013,26 +920,26 @@ play_switch:
 						printf("\x1B[?25l");
 						printf("%s",menu_text);
 						switch (load_map(input)) {
-							case 3:
-								clear_screen();
-								printf("\x1B[?25l");
-							    printf("%s",menu_text);
-							    printf("\n\nMap not found.");
-								break;
-							case 2:
-								clear_screen();
-								printf("\x1B[?25l");
-								printf("%s",menu_text);
-								printf("\n\nMap is malformed or corrupted.");
-							    break;
-							case 0:
-								play_state = 1;
-							    goto play_switch;
-							default:
-								clear_screen();
-								printf("\x1B[?25l");
-								printf("%s",menu_text);
-								printf("\n\nSomething went horribly wrong.");
+						case 3:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nMap not found.");
+							break;
+						case 2:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nMap is malformed or corrupted.");
+							break;
+						case 0:
+							play_state = 1;
+							goto play_switch;
+						default:
+							clear_screen();
+							printf("\x1B[?25l");
+							printf("%s",menu_text);
+							printf("\n\nSomething went horribly wrong.");
 							break;
 						}
 					} else {
