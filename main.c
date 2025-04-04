@@ -47,12 +47,18 @@ char game_map[ROWS * (COLS + 1) + 1];
 char persist_map[ROWS * (COLS + 1) + 1];
 
 Move get_move(const char input) {
-	switch (input) {
-		case 'w': return (Move){ 0, -1, 1 }; // Up
-		case 's': return (Move){ 0,  1, 3 }; // Down
-		case 'a': return (Move){ -1, 0, 2 }; // Left
-		case 'd': return (Move){ 1,  0, 4 }; // Right
-		default:  return (Move){ 0,  0, 0 };
+    const char* found_char = strchr(keybinds, input);
+    if (found_char != NULL) {
+	    const int index =  (int)(found_char - keybinds);
+	    switch (index) {
+	        case 0: return (Move){ 0, -1, 1 }; // Up
+        	case 2: return (Move){ 0,  1, 3 }; // Down
+        	case 1: return (Move){ -1, 0, 2 }; // Left
+        	case 3: return (Move){ 1,  0, 4 }; // Right
+        	default: return (Move){ 0,  0, 0 };
+	    }
+    } else {
+	    return (Move){ 0,  0, 0 };
 	}
 }
 
@@ -359,7 +365,9 @@ int box_check(const int x, const int y, const int direction) {
 	if (!collision) return 1;
 
 	box* b = find_box(x, y);
-	if (!b || direction-1 >= 0) return 1;
+	if (!b || direction-1 < 0 || direction > 4) {
+	    return 1;
+	}
 
 	const Move move = get_move(keybinds[direction-1]);
 
@@ -609,13 +617,12 @@ int handle_gameplay() {
 				death_text_printed = 1;
 				set_nonblocking(1, 0);
 			} else {
-				const char ch = getchar();
-				switch (ch) {
-				case 'r':
-					respawn(game_state_mutex);
-					break;
-				case 'n':
-					if (strcmp(next_map,"") != 0) {
+				const char ch = tolower(getchar());
+				if (ch ==keybinds[4]) {
+				    respawn(game_state_mutex);
+				}
+				if (ch ==keybinds[7]) {
+				    if (strcmp(next_map,"") != 0) {
 						pthread_mutex_lock(&game_state_mutex);
 						win_map = 0;
 						death_text_printed = 0;
@@ -623,15 +630,12 @@ int handle_gameplay() {
 						pthread_mutex_unlock(&game_state_mutex);
 						return 5;
 					}
-					break;
-				case 'q':
-					death = 0;
+				}
+				if (ch ==keybinds[5]) {
+				    death = 0;
 					death_text_printed = 0;
 					escape_flag = 1;
 					clear_screen();
-					break;
-				default:
-					break;
 				}
 			}
 		} else {
@@ -642,23 +646,19 @@ int handle_gameplay() {
 					death_text_printed = 1;
 					set_nonblocking(1, 0);
 				} else {
-					const char ch = getchar();
-					switch (ch) {
-					case 'r':
-						respawn(game_state_mutex);
-						break;
-					case 'q':
-						death = 0;
-						death_text_printed = 0;
-						escape_flag = 1;
-						clear_screen();
-						break;
-					default:
-						break;
-					}
+					const char ch = tolower(getchar());
+					if (ch ==keybinds[4]) {
+				        respawn(game_state_mutex);
+				    }
+				    if (ch ==keybinds[5]) {
+    				    death = 0;
+    					death_text_printed = 0;
+    					escape_flag = 1;
+    					clear_screen();
+				    }
 				}
 			} else {
-				const char ch = getchar();
+				const char ch = tolower(getchar());
 				if (ch != EOF) {
 					const char* found_char = strchr(keybinds, ch);
 				    if (found_char != NULL) {
@@ -735,16 +735,18 @@ int handle_editor() {
 	render_editor(map_mode);
 
 	while (!escape_flag) {
-		const char ch = getchar();
+		const char ch = tolower(getchar());
 		if (ch != EOF) {
 			const char* found_char = strchr(keybinds, ch);
 			if (found_char != NULL) {
 				const int index =  (int)(found_char - keybinds);
 				if (index <= 3 && index >= 0 ) {
-					const Move move = get_move(ch);
-					playerX += move.dx;
-					playerY += move.dy;
-				}
+		    		const Move move = get_move(ch);
+	    			playerX += move.dx;
+	    			playerY += move.dy;
+	    			playerX = (playerX + COLS) % COLS;
+		            playerY = (playerY + ROWS) % ROWS;
+		    	}
 
 				if (ch == keybinds[9]) {
 					map_mode = !map_mode;
@@ -764,16 +766,28 @@ int handle_editor() {
 					set_nonblocking(0,0);
 					char* input = get_user_input();
 					set_nonblocking(1,0);
-					if(*input && strcmp(input,"") != 0) {
-						render_editor(map_mode);
+					if (input != NULL) {
+    					if (strlen(input) > 0) {
+    					    render_editor(map_mode);
+    						printf("\x1B[?25l");
+    						FILE *map_file = fopen(strcat(input,".map"),"w");
+    						fprintf(map_file,"map:\n%sEND\npersist:\n%sEND\nnext:%sEND\n", game_map, persist_map, next_map);
+    						fclose(map_file);
+    						printf("\n\nMap Exported. (%s)",input);
+    					}else {
+    					    render_editor(map_mode);
+    						printf("\x1B[?25l");
+    						printf("\n\nMap name must be more than one character.");
+    					}
+					}else {
+					    render_editor(map_mode);
 						printf("\x1B[?25l");
-						FILE *map_file = fopen(strcat(input,".map"),"w");
-						fprintf(map_file,"map:\n%sEND\npersist:\n%sEND\nnext:%sEND\n", game_map, persist_map, next_map);
-						fclose(map_file);
-						printf("\n\nMap Exported. (%s)",input);
+						printf("\n\nMap name must be more than one character.");
 					}
-					free(input);
-					continue;
+						
+    				free(input);
+    				continue;
+					
 				}
 				if (ch == keybinds[13]) {
 					printf("\x1B[?25h");
@@ -820,7 +834,7 @@ main_menu:
 input:
 	;
 	set_nonblocking(1,0);
-	const char ch = getchar();
+	const char ch = tolower(getchar());
 	if (ch != ' ' && ch != '\n' && ch != '\t' && ch != EOF) {
 		if (isdigit(ch)) {
 			const char str[2] = {ch,'\0'};
@@ -841,7 +855,7 @@ play_menu:
 			;
 			set_nonblocking(1,0);
 			printf("\x1B[?25l");
-			char ch1 = getchar();
+			char ch1 = tolower(getchar());
 			if (ch1 != ' ' && ch1 != '\n' && ch1 != '\t' && ch1 != EOF) {
 				unsigned short int play_state = 0;
 				if (isdigit(ch1)) {
