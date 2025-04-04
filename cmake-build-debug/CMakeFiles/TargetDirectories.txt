@@ -1,3 +1,0 @@
-/home/walmart/Documents/GitHub/cgame/cmake-build-debug/CMakeFiles/cgame.dir
-/home/walmart/Documents/GitHub/cgame/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/walmart/Documents/GitHub/cgame/cmake-build-debug/CMakeFiles/rebuild_cache.dir

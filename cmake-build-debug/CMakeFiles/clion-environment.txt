@@ -1,4 +1,0 @@
-ToolSet: 1.0 (local)Ninja: 1.12.1@/home/walmart/Downloads/clion-2024.3.2/bin/ninja/linux/x64/ninja
-Options: 
-
-Options:-DCMAKE_MAKE_PROGRAM=/home/walmart/Downloads/clion-2024.3.2/bin/ninja/linux/x64/ninja
