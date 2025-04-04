@@ -26,6 +26,8 @@ volatile int box_count = 0;
 volatile int menu_state = -1;
 volatile int win_map = 0;
 
+char keybinds[10] = {'w','a','s','d','r','q','\n','n','\\','e'};
+
 typedef struct {
 	int x;
 	int y;
@@ -92,7 +94,7 @@ char* get_user_input() {
 	while (!isblank((ch = getchar())) && ch != EOF && ch != '\n') {
 		if (len + 1 >= size) {
 			size *= 2;
-			char* new_buffer = realloc(buffer,size);
+			char* new_buffer = realloc(buffer, size);
 			if (!new_buffer) {
 				free(buffer);
 				perror("Unable to reallocate buffer");
@@ -103,10 +105,11 @@ char* get_user_input() {
 		buffer[len++] = ch;
 	}
 	buffer[len] = '\0';
-	if (isblank(*buffer)) {
-		return "";
-	}
 
+	if (len == 0) {
+		free(buffer);
+		return NULL;
+	}
 	return buffer;
 }
 
@@ -191,7 +194,7 @@ void copy_2d_array(char dest[ROWS][COLS], char src[ROWS][COLS]) {
 	}
 }
 
-void remove_box(int x, int y) {
+void remove_box(const int x, const int y) {
 	for (int i = 0; i < box_count; i++) {
 		if (boxes[i]->x == x && boxes[i]->y == y) {
 			free(boxes[i]);
@@ -356,16 +359,15 @@ int box_check(const int x, const int y, const int direction) {
 	if (!collision) return 1;
 
 	box* b = find_box(x, y);
-	if (!b) return 1;
+	if (!b || direction-1 >= 0) return 1;
 
-	const int dx[] = {0, 0, -1, 1};  // Left, Right
-	const int dy[] = {-1, 1, 0, 0};  // Up, Down
+	const Move move = get_move(keybinds[direction-1]);
 
-	int new_x = b->x + dx[direction - 1];
-	int new_y = b->y + dy[direction - 1];
+	const int new_x = b->x + move.dx;
+	const int new_y = b->y + move.dy;
 
 	if (new_x >= 0 && new_x < COLS && new_y >= 0 && new_y < ROWS) {
-		char cell = game_state[new_y][new_x];
+		const char cell = game_state[new_y][new_x];
 		if (cell == '.' || cell == '_' || cell == ' ') {
 			b->x = new_x;
 			b->y = new_y;
@@ -663,22 +665,23 @@ int handle_gameplay() {
 			} else {
 				const char ch = getchar();
 				if (ch != EOF) {
+				    if (strchr(keybinds, ch))
 					switch (ch) {
-					case 'w':
-					case 's':
-					case 'a':
-					case 'd':
+					case keybinds[0]:
+					case keybinds[1]:
+					case keybinds[2]:
+					case keybinds[3]:
 						const Move move = get_move(ch);
 						if (box_check(playerX + move.dx, playerY + move.dy, move.dir ) == 1 && check_collision(playerX + move.dx, playerY + move.dy)) {
 							playerX += move.dx;
 							playerY += move.dy;
 						}
 						break;
-					case 'q':
+					case keybinds[5]:
 						escape_flag = 1;
 						clear_screen();
 						break;
-					case 'r':
+					case keybinds[4]:
 						pthread_mutex_lock(&game_state_mutex);
 						death = 0;
 						death_text_printed = 0;
@@ -689,7 +692,7 @@ int handle_gameplay() {
 						init = 0;
 						pthread_mutex_unlock(&game_state_mutex);
 						break;
-					case '\\':
+					case keybinds[8]:
 						collision = !collision;  //noclip toggle
 						break;
 					default:
@@ -752,28 +755,18 @@ int handle_editor() {
 		const char ch = getchar();
 		if (ch != EOF) {
 			switch (ch) {
-				case 'W':
-			case 'w':
-				playerY = (playerY > 0) ? playerY - 1 : 0;
+			case keybinds[0]:
+			case keybinds[1]:
+			case keybinds[2]:
+			case keybinds[3]:
+				const Move move = get_move(ch);
+				playerX += move.dx;
+				playerY += move.dy;
 				break;
-			case 'A':
-			case 'a':
-				playerX = (playerX > 0) ? playerX - 1 : 0;
-				break;
-			case 'S':
-			case 's':
-				playerY = (playerY < ROWS - 1) ? playerY + 1 : ROWS - 1;
-				break;
-			case 'D':
-			case 'd':
-				playerX = (playerX < COLS - 1) ? playerX + 1 : COLS - 1;
-				break;
-			case 'E':
-			case 'e':
+			case keybinds[9]:
 				map_mode = !map_mode;
 				break;
-			case 'Q':
-			case 'q':
+			case keybinds[5]:
 				return 1;
 			case '1':
 				save_editor();
@@ -794,8 +787,8 @@ int handle_editor() {
 					fclose(map_file);
 					printf("\n\nMap Exported. (%s)",input);
 				}
+				free(input);
 				continue;
-			case 'F':
 			case 'f':
 				printf("\x1B[?25h");
 				printf("\n\nMap name: ");
