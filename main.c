@@ -26,7 +26,7 @@ volatile int box_count = 0;
 volatile int menu_state = -1;
 volatile int win_map = 0;
 
-char keybinds[10] = {'w','a','s','d','r','q','\n','n','\\','e'};
+char keybinds[14] = {'w','a','s','d','r','q','\n','n','\\','e','1','2','3','f'};
 
 typedef struct {
 	int x;
@@ -438,7 +438,7 @@ int load_map(const char *filepath) {
 	}
 
 	fseek(map_file, 0, SEEK_END);
-	long file_size = ftell(map_file);
+	const long file_size = ftell(map_file);
 	fseek(map_file, 0, SEEK_SET);
 
 	char* buffer = malloc(file_size+1);
@@ -524,7 +524,7 @@ int load_map(const char *filepath) {
 	return 0;
 }
 
-void render_editor(int state) {
+void render_editor(const int state) {
 	char buffer[ROWS * (COLS * 10) + 1];
 	int index = 0;
 
@@ -559,6 +559,19 @@ buffer_full:
 	clear_screen();
 	printf("%s", buffer);
 	printf("\nWASD - Move cursor    E - Switch map mode    Current map: %s\nQ - Quit editor    1 - Save    2 - Export map    F - Set next map: %s.map", state ? "Regular" : "Persist",next_map);
+}
+
+void respawn(pthread_mutex_t game_state_mutex) {
+	pthread_mutex_lock(&game_state_mutex);
+	death = 0;
+	win_map = 0;
+	death_text_printed = 0;
+	init = 1;
+	playerX = COLS / 2;
+	playerY = ROWS / 2;
+	update_game_state(&init);
+	init = 0;
+	pthread_mutex_unlock(&game_state_mutex);
 }
 
 int handle_gameplay() {
@@ -599,16 +612,7 @@ int handle_gameplay() {
 				const char ch = getchar();
 				switch (ch) {
 				case 'r':
-					pthread_mutex_lock(&game_state_mutex);
-					win_map = 0;
-					death_text_printed = 0;
-					init = 1;
-					playerX = COLS / 2;
-					playerY = ROWS / 2;
-					update_game_state(&init);
-					init = 0;
-					set_nonblocking(1, 1);
-					pthread_mutex_unlock(&game_state_mutex);
+					respawn(game_state_mutex);
 					break;
 				case 'n':
 					if (strcmp(next_map,"") != 0) {
@@ -641,16 +645,7 @@ int handle_gameplay() {
 					const char ch = getchar();
 					switch (ch) {
 					case 'r':
-						pthread_mutex_lock(&game_state_mutex);
-						death = 0;
-						death_text_printed = 0;
-						init = 1;
-						playerX = COLS / 2;
-						playerY = ROWS / 2;
-						update_game_state(&init);
-						init = 0;
-						set_nonblocking(1, 1);
-						pthread_mutex_unlock(&game_state_mutex);
+						respawn(game_state_mutex);
 						break;
 					case 'q':
 						death = 0;
@@ -665,39 +660,24 @@ int handle_gameplay() {
 			} else {
 				const char ch = getchar();
 				if (ch != EOF) {
-				    if (strchr(keybinds, ch))
-					switch (ch) {
-					case keybinds[0]:
-					case keybinds[1]:
-					case keybinds[2]:
-					case keybinds[3]:
-						const Move move = get_move(ch);
-						if (box_check(playerX + move.dx, playerY + move.dy, move.dir ) == 1 && check_collision(playerX + move.dx, playerY + move.dy)) {
-							playerX += move.dx;
-							playerY += move.dy;
-						}
-						break;
-					case keybinds[5]:
-						escape_flag = 1;
-						clear_screen();
-						break;
-					case keybinds[4]:
-						pthread_mutex_lock(&game_state_mutex);
-						death = 0;
-						death_text_printed = 0;
-						init = 1;
-						playerX = COLS / 2;
-						playerY = ROWS / 2;
-						update_game_state(&init);
-						init = 0;
-						pthread_mutex_unlock(&game_state_mutex);
-						break;
-					case keybinds[8]:
-						collision = !collision;  //noclip toggle
-						break;
-					default:
-						break;
-					}
+					const char* found_char = strchr(keybinds, ch);
+				    if (found_char != NULL) {
+					    const int index =  (int)(found_char - keybinds);
+				    	if (index <= 3 && index >= 0 ) {
+				    		const Move move = get_move(ch);
+				    		if (box_check(playerX + move.dx, playerY + move.dy, move.dir ) == 1 && check_collision(playerX + move.dx, playerY + move.dy)) {
+				    			playerX += move.dx;
+				    			playerY += move.dy;
+				    		}
+				    	}
+				    	if (keybinds[5]) {
+				    		escape_flag = 1;
+				    		clear_screen();
+				    	}
+				    	if (keybinds[8]) {
+				    		collision = !collision;  //noclip toggle
+				    	}
+				    }
 					if (!escape_flag) {
 						update_game_state(&init);
 					}
@@ -754,54 +734,58 @@ int handle_editor() {
 	while (!escape_flag) {
 		const char ch = getchar();
 		if (ch != EOF) {
-			switch (ch) {
-			case keybinds[0]:
-			case keybinds[1]:
-			case keybinds[2]:
-			case keybinds[3]:
-				const Move move = get_move(ch);
-				playerX += move.dx;
-				playerY += move.dy;
-				break;
-			case keybinds[9]:
-				map_mode = !map_mode;
-				break;
-			case keybinds[5]:
-				return 1;
-			case '1':
-				save_editor();
-				printf("\n\nMap Saved.");
-				continue;
-			case '2':
-				save_editor();
-				printf("\x1B[?25h");
-				printf("\n\nMap name: ");
-				set_nonblocking(0,0);
-				char* input = get_user_input();
-				set_nonblocking(1,0);
-				if(*input && strcmp(input,"") != 0) {
-					render_editor(map_mode);
-					printf("\x1B[?25l");
-					FILE *map_file = fopen(strcat(input,".map"),"w");
-					fprintf(map_file,"map:\n%sEND\npersist:\n%sEND\nnext:%sEND\n", game_map, persist_map, next_map);
-					fclose(map_file);
-					printf("\n\nMap Exported. (%s)",input);
+			const char* found_char = strchr(keybinds, ch);
+			if (found_char != NULL) {
+				const int index =  (int)(found_char - keybinds);
+				if (index <= 3 && index >= 0 ) {
+					const Move move = get_move(ch);
+					playerX += move.dx;
+					playerY += move.dy;
 				}
-				free(input);
-				continue;
-			case 'f':
-				printf("\x1B[?25h");
-				printf("\n\nMap name: ");
-				set_nonblocking(0,0);
-				const char* next_input = get_user_input();
-				set_nonblocking(1,0);
-				if(*next_input && strcmp(next_input,"") != 0) {
-					printf("\x1B[?25l");
-					next_map = next_input;
-					render_editor(map_mode);
+
+				if (keybinds[9]) {
+					map_mode = !map_mode;
 				}
-				continue;
-			default:
+				if (keybinds[5]) {
+					return 1;
+				}
+				if (keybinds[10]) {
+					save_editor();
+					printf("\n\nMap Saved.");
+					continue;
+				}
+				if (keybinds[11]) {
+					save_editor();
+					printf("\x1B[?25h");
+					printf("\n\nMap name: ");
+					set_nonblocking(0,0);
+					char* input = get_user_input();
+					set_nonblocking(1,0);
+					if(*input && strcmp(input,"") != 0) {
+						render_editor(map_mode);
+						printf("\x1B[?25l");
+						FILE *map_file = fopen(strcat(input,".map"),"w");
+						fprintf(map_file,"map:\n%sEND\npersist:\n%sEND\nnext:%sEND\n", game_map, persist_map, next_map);
+						fclose(map_file);
+						printf("\n\nMap Exported. (%s)",input);
+					}
+					free(input);
+					continue;
+				}
+				if (keybinds[13]) {
+					printf("\x1B[?25h");
+					printf("\n\nMap name: ");
+					set_nonblocking(0,0);
+					const char* next_input = get_user_input();
+					set_nonblocking(1,0);
+					if(*next_input && strcmp(next_input,"") != 0) {
+						printf("\x1B[?25l");
+						next_map = next_input;
+						render_editor(map_mode);
+					}
+					continue;
+				}
+			}else {
 				if (isprint(ch)) {
 					if (map_mode) {
 						game_state[playerY][playerX] = ch;
@@ -809,7 +793,6 @@ int handle_editor() {
 						persist_array[playerY][playerX] = ch;
 					}
 				}
-				break;
 			}
 			render_editor(map_mode);
 		}
