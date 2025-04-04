@@ -603,9 +603,9 @@ int handle_gameplay() {
 				const char *death_text = "\x1B[38;5;42m /$$     /$$                        /$$      /$$ /$$          \n|  $$   /$$/                       | $$  /$ | $$|__/          \n \\  $$ /$$//$$$$$$  /$$   /$$      | $$ /$$$| $$ /$$ /$$$$$$$ \n  \\  $$$$//$$__  $$| $$  | $$      | $$/$$ $$ $$| $$| $$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$$$_  $$$$| $$| $$  \\ $$\n    | $$ | $$  | $$| $$  | $$      | $$$/ \\  $$$| $$| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$/   \\  $$| $$| $$  | $$\n    |__/  \\______/  \\______/       |__/     \\__/|__/|__/  |__/\n\x1B[0m";
 				printf("%s",death_text);
 				if (strcmp(next_map,"") != 0) {
-					printf("-n to go to the next map   ");
+					printf("-%c to go to the next map   ",keybinds[7]);
 				}
-				printf("-r to respawn   -q to quit to menu");
+				printf("-%c to respawn   -%c to quit to menu",keybinds[4],keybinds[5]);
 				death_text_printed = 1;
 				set_nonblocking(1, 0);
 			} else {
@@ -638,7 +638,7 @@ int handle_gameplay() {
 			if (death) {
 				if (!death_text_printed) {
 					clear_screen();
-					printf("\x1B[41m /$$     /$$                        /$$$$$$$  /$$                 /$$\n|  $$   /$$/                       | $$__  $$|__/                | $$\n \\  $$ /$$//$$$$$$  /$$   /$$      | $$  \\ $$ /$$  /$$$$$$   /$$$$$$$\n  \\  $$$$//$$__  $$| $$  | $$      | $$  | $$| $$ /$$__  $$ /$$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$  | $$| $$| $$$$$$$$| $$  | $$\n    | $$ | $$  | $$| $$  | $$      | $$  | $$| $$| $$_____/| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$$$$$$/| $$|  $$$$$$$|  $$$$$$$\n    |__/  \\______/  \\______/       |_______/ |__/ \\_______/ \\_______/\n\x1B[0m-r to respawn   -q to quit to menu");
+					printf("\x1B[41m /$$     /$$                        /$$$$$$$  /$$                 /$$\n|  $$   /$$/                       | $$__  $$|__/                | $$\n \\  $$ /$$//$$$$$$  /$$   /$$      | $$  \\ $$ /$$  /$$$$$$   /$$$$$$$\n  \\  $$$$//$$__  $$| $$  | $$      | $$  | $$| $$ /$$__  $$ /$$__  $$\n   \\  $$/| $$  \\ $$| $$  | $$      | $$  | $$| $$| $$$$$$$$| $$  | $$\n    | $$ | $$  | $$| $$  | $$      | $$  | $$| $$| $$_____/| $$  | $$\n    | $$ |  $$$$$$/|  $$$$$$/      | $$$$$$$/| $$|  $$$$$$$|  $$$$$$$\n    |__/  \\______/  \\______/       |_______/ |__/ \\_______/ \\_______/\n\x1B[0m-%c to respawn   -%c to quit to menu",keybinds[4],keybinds[5]);
 					death_text_printed = 1;
 					set_nonblocking(1, 0);
 				} else {
@@ -670,11 +670,14 @@ int handle_gameplay() {
 				    			playerY += move.dy;
 				    		}
 				    	}
-				    	if (keybinds[5]) {
+				    	if (ch == keybinds[5]) {
 				    		escape_flag = 1;
 				    		clear_screen();
 				    	}
-				    	if (keybinds[8]) {
+				    	if (ch == keybinds[4]) {
+				    		respawn(game_state_mutex);
+				    	}
+				    	if (ch == keybinds[8]) {
 				    		collision = !collision;  //noclip toggle
 				    	}
 				    }
@@ -743,18 +746,18 @@ int handle_editor() {
 					playerY += move.dy;
 				}
 
-				if (keybinds[9]) {
+				if (ch == keybinds[9]) {
 					map_mode = !map_mode;
 				}
-				if (keybinds[5]) {
+				if (ch == keybinds[5]) {
 					return 1;
 				}
-				if (keybinds[10]) {
+				if (ch == keybinds[10]) {
 					save_editor();
 					printf("\n\nMap Saved.");
 					continue;
 				}
-				if (keybinds[11]) {
+				if (ch == keybinds[11]) {
 					save_editor();
 					printf("\x1B[?25h");
 					printf("\n\nMap name: ");
@@ -772,7 +775,7 @@ int handle_editor() {
 					free(input);
 					continue;
 				}
-				if (keybinds[13]) {
+				if (ch == keybinds[13]) {
 					printf("\x1B[?25h");
 					printf("\n\nMap name: ");
 					set_nonblocking(0,0);
