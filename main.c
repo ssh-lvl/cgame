@@ -114,7 +114,7 @@ char* get_user_input() {
 
 	if (len == 0) {
 		free(buffer);
-		return NULL;
+		return "";
 	}
 	return buffer;
 }
